@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  parseExportColumns,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -81,5 +87,47 @@ describe("exportFilename", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
     )
+  })
+
+  it("puts the scope label between the prefix and the date", () => {
+    expect(
+      exportFilename(new Date("2026-08-13T12:00:00.000Z"), "disputed"),
+    ).toBe("payments-disputed-2026-08-13.csv")
+  })
+})
+
+describe("parseExportColumns", () => {
+  it("keeps a subset of columns in the order requested", () => {
+    const result = parseExportColumns("amount,id,status")
+    expect(result).toEqual({ columns: ["amount", "id", "status"] })
+    if (!("columns" in result)) throw new Error("expected columns")
+    expect(toCsv([payment], result.columns).split("\n")[0]).toBe(
+      "amount,id,status",
+    )
+  })
+
+  it("excludes the card last four by default, and nothing else", () => {
+    const result = parseExportColumns(null)
+    expect(result).toEqual({ columns: [...DEFAULT_EXPORT_COLUMNS] })
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    expect(DEFAULT_EXPORT_COLUMNS).toEqual(
+      EXPORT_COLUMNS.filter((column) => column !== "last4"),
+    )
+    expect(toCsv([payment], DEFAULT_EXPORT_COLUMNS)).not.toContain("4242")
+  })
+
+  it("rejects an empty selection rather than producing an empty file", () => {
+    expect(parseExportColumns("")).toHaveProperty("error")
+    expect(parseExportColumns(" , ,")).toHaveProperty("error")
+  })
+
+  it("rejects a column outside the allowlist", () => {
+    expect(parseExportColumns("id,password")).toHaveProperty("error")
+  })
+
+  it("includes the last four only when asked for, and drops duplicates", () => {
+    expect(parseExportColumns("last4,id,last4")).toEqual({
+      columns: ["last4", "id"],
+    })
   })
 })

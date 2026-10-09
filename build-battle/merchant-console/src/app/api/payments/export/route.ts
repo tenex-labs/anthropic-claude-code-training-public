@@ -1,25 +1,50 @@
-import { filterPayments, parseFilters, sortPayments } from "@/data/queries"
-import { exportFilename, toCsv } from "@/lib/csv"
-import { NextRequest } from "next/server"
+import { parseFilters, queryAllPayments } from "@/data/queries"
+import { PaymentFilters } from "@/data/types"
+import { exportFilename, parseExportColumns, toCsv } from "@/lib/csv"
+import { NextRequest, NextResponse } from "next/server"
+
+const SCOPES = ["filter", "all"] as const
 
 /**
- * Exports the payments table as CSV.
+ * Exports payments as CSV.
  *
- * Honors the active filters and reuses the query builder, but the column set
- * and the scope are fixed. Giving ops control over both is NWP-101.
+ * Runs on the server against every matching row, not the page on screen, and
+ * goes through the same query builder as `GET /api/payments`. Columns and
+ * scope come from the client and are checked against allowlists first.
  */
 export function GET(request: NextRequest) {
-  const filters = parseFilters(request.nextUrl.searchParams)
-  const rows = sortPayments(
-    filterPayments(filters),
-    filters.sort,
-    filters.direction,
-  )
+  const params = request.nextUrl.searchParams
 
-  return new Response(toCsv(rows), {
+  const scope = params.get("scope") ?? "filter"
+  if (!SCOPES.includes(scope as (typeof SCOPES)[number])) {
+    return NextResponse.json({ error: "Unknown export scope." }, { status: 400 })
+  }
+
+  const selection = parseExportColumns(params.get("columns"))
+  if ("error" in selection) {
+    return NextResponse.json({ error: selection.error }, { status: 400 })
+  }
+
+  const parsed = parseFilters(params)
+  const filters: PaymentFilters =
+    scope === "all"
+      ? { sort: parsed.sort, direction: parsed.direction }
+      : parsed
+  const rows = queryAllPayments(filters)
+
+  return new Response(toCsv(rows, selection.columns), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${exportFilename()}"`,
+      "content-disposition": `attachment; filename="${exportFilename(new Date(), filenameLabel(filters))}"`,
     },
   })
+}
+
+/** Built only from allowlisted values; raw search or merchant input never reaches the header. */
+function filenameLabel(filters: PaymentFilters): string {
+  if (filters.status && filters.status !== "all") return filters.status
+  if (filters.merchantId || filters.search || filters.from || filters.to) {
+    return "filtered"
+  }
+  return "all"
 }
