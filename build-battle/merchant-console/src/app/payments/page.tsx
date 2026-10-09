@@ -10,8 +10,8 @@ import {
 } from "@/components/Table"
 import { StatusBadge } from "@/components/ui/payments/StatusBadge"
 import { merchantById, merchants } from "@/data/merchants"
-import { queryPayments } from "@/data/queries"
-import { PaymentFilters, PaymentStatus } from "@/data/types"
+import { parseFilters, queryPayments } from "@/data/queries"
+import { PaymentStatus } from "@/data/types"
 import { DEFAULT_EXPORT_COLUMNS, EXPORT_COLUMNS } from "@/lib/csv"
 import { formatDate } from "@/lib/dates"
 import { formatMoney } from "@/lib/money"
@@ -19,7 +19,8 @@ import Link from "next/link"
 import { ExportDialog } from "./export-dialog"
 import { PaymentsFilterBar } from "./filter-bar"
 
-const STATUSES: (PaymentStatus | "all")[] = [
+/** The order the status filter lists its options in. Validation is parseFilters'. */
+const STATUS_OPTIONS: (PaymentStatus | "all")[] = [
   "all",
   "captured",
   "authorized",
@@ -34,19 +35,14 @@ export default async function PaymentsPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const params = await searchParams
-  const filters: PaymentFilters = {
-    status: (STATUSES.includes(params.status as PaymentStatus)
-      ? params.status
-      : "all") as PaymentFilters["status"],
-    merchantId: params.merchantId || undefined,
-    search: params.search || undefined,
-    page: Number(params.page ?? "1") || 1,
-  }
-
-  const { rows, total, page, pageCount } = queryPayments(filters)
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][],
   )
+  // Parsed exactly as the export route parses it, so the table, the dialog's
+  // row count, and the downloaded file always agree.
+  const filters = parseFilters(query)
+
+  const { rows, total, page, pageCount } = queryPayments(filters)
 
   // The export is unpaginated, so the page index does not travel with it.
   const exportQuery = new URLSearchParams(query)
@@ -62,7 +58,7 @@ export default async function PaymentsPage({
     <section aria-label="Payments">
       <div className="flex flex-col justify-between gap-2 px-4 py-6 sm:flex-row sm:items-center sm:p-6">
         <PaymentsFilterBar
-          statuses={STATUSES}
+          statuses={STATUS_OPTIONS}
           merchants={merchants.map((m) => ({ id: m.id, name: m.name }))}
           current={{
             status: (filters.status as string) ?? "all",

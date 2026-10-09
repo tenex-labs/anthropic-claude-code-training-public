@@ -1,5 +1,6 @@
 import { merchantById } from "@/data/merchants"
 import { Payment } from "@/data/types"
+import { utcDayKey } from "./dates"
 import { formatMoney } from "./money"
 
 /**
@@ -104,6 +105,6 @@ export function toCsv(
  * label. The label must come from an allowlisted value, never raw input.
  */
 export function exportFilename(date = new Date(), label?: string): string {
-  const day = date.toISOString().slice(0, 10)
+  const day = utcDayKey(date.toISOString())
   return label ? `payments-${label}-${day}.csv` : `payments-${day}.csv`
 }

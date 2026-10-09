@@ -12,10 +12,11 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/Drawer"
+import type { ExportColumn, ExportScope } from "@/lib/csv"
 import { Download } from "lucide-react"
 import { useState } from "react"
 
-const COLUMN_LABELS: Record<string, string> = {
+const COLUMN_LABELS: Record<ExportColumn, string> = {
   id: "Payment ID",
   created_at: "Created (UTC)",
   merchant: "Merchant",
@@ -28,8 +29,6 @@ const COLUMN_LABELS: Record<string, string> = {
   currency: "Currency",
 }
 
-type Scope = "filtered" | "all"
-
 /**
  * Options for the payments export: which columns and which rows. The server
  * validates both again; disabling Download here is only a convenience.
@@ -40,18 +39,18 @@ export function ExportDialog({
   query,
   counts,
 }: {
-  columns: readonly string[]
-  defaultColumns: readonly string[]
+  columns: readonly ExportColumn[]
+  defaultColumns: readonly ExportColumn[]
   /** The current filter, as a query string without the page. */
   query: string
   counts: { filtered: number; all: number }
 }) {
-  const [scope, setScope] = useState<Scope>("filtered")
-  const [selected, setSelected] = useState<Set<string>>(
+  const [scope, setScope] = useState<ExportScope>("filtered")
+  const [selected, setSelected] = useState<Set<ExportColumn>>(
     () => new Set(defaultColumns),
   )
 
-  const toggle = (column: string) =>
+  const toggle = (column: ExportColumn) =>
     setSelected((current) => {
       const next = new Set(current)
       if (next.has(column)) next.delete(column)
@@ -66,7 +65,7 @@ export function ExportDialog({
   params.set("columns", chosen.join(","))
   const href = `/api/payments/export?${params.toString()}`
 
-  const scopes: { value: Scope; label: string; count: number }[] = [
+  const scopes: { value: ExportScope; label: string; count: number }[] = [
     { value: "filtered", label: "Current filter", count: counts.filtered },
     { value: "all", label: "All payments", count: counts.all },
   ]
@@ -138,7 +137,7 @@ export function ExportDialog({
                     onChange={() => toggle(column)}
                     className="size-4 accent-blue-500"
                   />
-                  {COLUMN_LABELS[column] ?? column}
+                  {COLUMN_LABELS[column]}
                 </label>
               ))}
             </div>
