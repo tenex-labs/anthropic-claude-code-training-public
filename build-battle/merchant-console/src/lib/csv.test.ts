@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  exportFilename,
+  parseExportColumns,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -26,12 +31,32 @@ describe("toCsv", () => {
   it("writes a header row followed by one row per payment", () => {
     const lines = toCsv([payment]).split("\n")
     expect(lines).toHaveLength(2)
-    expect(lines[0]).toBe(EXPORT_COLUMNS.join(","))
+    expect(lines[0]).toBe(DEFAULT_EXPORT_COLUMNS.join(","))
+    expect(lines[0]).not.toContain("last4")
   })
 
   it("writes only the requested columns, in the order given", () => {
-    expect(toCsv([payment], ["id", "amount"])).toBe(
-      ["id,amount", "pay_0001,$250.00"].join("\n"),
+    expect(toCsv([payment], ["amount", "id"])).toBe(
+      ["amount,id", "$250.00,pay_0001"].join("\n"),
+    )
+  })
+
+  it("rejects an empty column selection", () => {
+    expect(() => toCsv([payment], [])).toThrow(
+      "At least one export column is required",
+    )
+    expect(() => parseExportColumns("")).toThrow(
+      "At least one export column is required",
+    )
+  })
+
+  it("validates requested columns while preserving their order", () => {
+    expect(parseExportColumns("amount, id")).toEqual(["amount", "id"])
+    expect(() => parseExportColumns("id,unknown")).toThrow(
+      "Unknown export column: unknown",
+    )
+    expect(() => parseExportColumns("id,id")).toThrow(
+      "Export columns must be unique",
     )
   })
 
@@ -77,9 +102,9 @@ describe("toCsv", () => {
 })
 
 describe("exportFilename", () => {
-  it("stamps the UTC date, so two exports on the same day collide by design", () => {
-    expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
-      "payments-2026-03-14.csv",
+  it("includes the export label and UTC date", () => {
+    expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"), "disputed")).toBe(
+      "payments-disputed-2026-03-14.csv",
     )
   })
 })

@@ -25,6 +25,39 @@ export const EXPORT_COLUMNS = [
 
 export type ExportColumn = (typeof EXPORT_COLUMNS)[number]
 
+export const DEFAULT_EXPORT_COLUMNS = [
+  "id",
+  "created_at",
+  "merchant",
+  "description",
+  "status",
+  "method",
+  "card_brand",
+  "amount",
+  "currency",
+] as const satisfies readonly ExportColumn[]
+
+const EXPORT_COLUMN_SET = new Set<string>(EXPORT_COLUMNS)
+
+/** Parse and validate the client-supplied column list at the route boundary. */
+export function parseExportColumns(value: string | null): ExportColumn[] {
+  if (value === null) return [...DEFAULT_EXPORT_COLUMNS]
+
+  const requested = value.split(",").map((column) => column.trim())
+  if (requested.length === 0 || requested.some((column) => !column)) {
+    throw new Error("At least one export column is required")
+  }
+
+  const invalid = requested.find((column) => !EXPORT_COLUMN_SET.has(column))
+  if (invalid) throw new Error(`Unknown export column: ${invalid}`)
+
+  if (new Set(requested).size !== requested.length) {
+    throw new Error("Export columns must be unique")
+  }
+
+  return requested as ExportColumn[]
+}
+
 function escapeCell(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
   return value
@@ -57,8 +90,12 @@ function cell(payment: Payment, column: ExportColumn): string {
 
 export function toCsv(
   payments: Payment[],
-  columns: readonly ExportColumn[] = EXPORT_COLUMNS,
+  columns: readonly ExportColumn[] = DEFAULT_EXPORT_COLUMNS,
 ): string {
+  if (columns.length === 0) {
+    throw new Error("At least one export column is required")
+  }
+
   const header = columns.join(",")
   const rows = payments.map((payment) =>
     columns.map((column) => escapeCell(cell(payment, column))).join(","),
@@ -66,6 +103,9 @@ export function toCsv(
   return [header, ...rows].join("\n")
 }
 
-export function exportFilename(date = new Date()): string {
-  return `payments-${date.toISOString().slice(0, 10)}.csv`
+export function exportFilename(
+  date = new Date(),
+  label = "filtered",
+): string {
+  return `payments-${label}-${date.toISOString().slice(0, 10)}.csv`
 }
