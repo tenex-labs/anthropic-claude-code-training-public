@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  parseExportColumns,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -31,13 +37,24 @@ describe("toCsv", () => {
 
   it("writes only the requested columns, in the order given", () => {
     expect(toCsv([payment], ["id", "amount"])).toBe(
-      ["id,amount", "pay_0001,$250.00"].join("\n"),
+      ["id,amount", "pay_0001,250.00"].join("\n"),
     )
   })
 
-  it("quotes cells containing a comma, so amounts do not split", () => {
+  it("quotes cells containing a comma, so they do not split", () => {
+    const comma = { ...payment, description: "Order 1180, expedited" }
+    expect(toCsv([comma], ["description"])).toBe(
+      ["description", '"Order 1180, expedited"'].join("\n"),
+    )
+  })
+
+  it("writes amounts as plain decimals from minor units, summable in a spreadsheet", () => {
     const large = { ...payment, amount: 123456789 }
-    expect(toCsv([large], ["amount"])).toBe(['amount', '"$1,234,567.89"'].join("\n"))
+    expect(toCsv([large], ["amount", "currency"])).toBe(
+      ["amount,currency", "1234567.89,USD"].join("\n"),
+    )
+    const cents = { ...payment, amount: 7 }
+    expect(toCsv([cents], ["amount"])).toBe(["amount", "0.07"].join("\n"))
   })
 
   it("doubles embedded quotes rather than dropping them", () => {
@@ -76,10 +93,45 @@ describe("toCsv", () => {
   })
 })
 
+describe("parseExportColumns", () => {
+  it("returns the default set when no columns are requested, with last4 left out", () => {
+    expect(parseExportColumns(null)).toEqual([...DEFAULT_EXPORT_COLUMNS])
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    expect(DEFAULT_EXPORT_COLUMNS).toHaveLength(EXPORT_COLUMNS.length - 1)
+  })
+
+  it("keeps the requested order, including last4 when asked for explicitly", () => {
+    expect(parseExportColumns("amount,id,last4")).toEqual([
+      "amount",
+      "id",
+      "last4",
+    ])
+  })
+
+  it("rejects any name outside the allowlist rather than dropping it", () => {
+    expect(parseExportColumns("id,amount;DROP TABLE payments")).toBeNull()
+    expect(parseExportColumns("id,last_four")).toBeNull()
+  })
+
+  it("rejects an empty selection", () => {
+    expect(parseExportColumns("")).toBeNull()
+    expect(parseExportColumns(" , ,")).toBeNull()
+  })
+})
+
 describe("exportFilename", () => {
   it("stamps the UTC date, so two exports on the same day collide by design", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
+    )
+  })
+
+  it("puts a validated scope label between the prefix and the date", () => {
+    expect(
+      exportFilename(new Date("2026-08-13T10:00:00.000Z"), "disputed"),
+    ).toBe("payments-disputed-2026-08-13.csv")
+    expect(exportFilename(new Date("2026-08-13T10:00:00.000Z"), "all")).toBe(
+      "payments-all-2026-08-13.csv",
     )
   })
 })
