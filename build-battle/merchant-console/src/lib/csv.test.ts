@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  parseColumns,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -76,10 +82,54 @@ describe("toCsv", () => {
   })
 })
 
+describe("column selection (NWP-101)", () => {
+  it("keeps a subset of columns in the order requested, not the default order", () => {
+    const columns = parseColumns("amount,currency,id")
+    expect(columns).toEqual(["amount", "currency", "id"])
+    expect(toCsv([payment], columns!)).toBe(
+      ["amount,currency,id", "$250.00,USD,pay_0001"].join("\n"),
+    )
+  })
+
+  it("leaves the card last four out by default", () => {
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    expect(parseColumns(null)).toEqual([...DEFAULT_EXPORT_COLUMNS])
+    const header = toCsv([payment], parseColumns(null)!).split("\n")[0]
+    expect(header.split(",")).not.toContain("last4")
+    expect(toCsv([payment], parseColumns(null)!)).not.toContain("4242")
+  })
+
+  it("rejects an empty selection rather than producing an empty file", () => {
+    expect(parseColumns("")).toBeNull()
+    expect(parseColumns(" , ,")).toBeNull()
+  })
+
+  it("rejects an unknown column instead of dropping it", () => {
+    expect(parseColumns("id,card_number")).toBeNull()
+    expect(parseColumns("id; DROP TABLE payments")).toBeNull()
+  })
+
+  it("collapses duplicate columns, keeping the first position", () => {
+    expect(parseColumns("id,amount,id")).toEqual(["id", "amount"])
+  })
+
+  it("still includes last four when it is asked for explicitly", () => {
+    expect(toCsv([payment], parseColumns("id,last4")!)).toBe(
+      ["id,last4", "pay_0001,4242"].join("\n"),
+    )
+  })
+})
+
 describe("exportFilename", () => {
   it("stamps the UTC date, so two exports on the same day collide by design", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
+    )
+  })
+
+  it("puts the scope label before the date", () => {
+    expect(exportFilename(new Date("2026-08-13T12:00:00.000Z"), "disputed")).toBe(
+      "payments-disputed-2026-08-13.csv",
     )
   })
 })

@@ -5,9 +5,10 @@ import { formatMoney } from "./money"
 /**
  * CSV export for the payments table.
  *
- * The column set is fixed. Ops has asked for control over it — that is
- * NWP-101 — but today everyone gets every column, including the card
- * last four, whether or not the file is going to a merchant.
+ * Ops chooses the columns (NWP-101). Column names arrive from the client, so
+ * they are checked against EXPORT_COLUMNS here before they reach toCsv. The
+ * card last four is off unless someone asks for it, because these files go
+ * to merchants.
  */
 
 export const EXPORT_COLUMNS = [
@@ -24,6 +25,32 @@ export const EXPORT_COLUMNS = [
 ] as const
 
 export type ExportColumn = (typeof EXPORT_COLUMNS)[number]
+
+export const DEFAULT_EXPORT_COLUMNS: readonly ExportColumn[] =
+  EXPORT_COLUMNS.filter((column) => column !== "last4")
+
+/**
+ * Validates a comma-separated column list from the client. A missing param
+ * means the defaults. An empty list or any unknown name is rejected with
+ * null, not silently dropped, so a typo cannot ship a file missing a column.
+ * Duplicates collapse, and the requested order is kept.
+ */
+export function parseColumns(raw: string | null): ExportColumn[] | null {
+  if (raw === null) return [...DEFAULT_EXPORT_COLUMNS]
+
+  const names = raw
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+  if (names.length === 0) return null
+
+  const columns: ExportColumn[] = []
+  for (const name of names) {
+    if (!EXPORT_COLUMNS.includes(name as ExportColumn)) return null
+    if (!columns.includes(name as ExportColumn)) columns.push(name as ExportColumn)
+  }
+  return columns
+}
 
 function escapeCell(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
@@ -66,6 +93,8 @@ export function toCsv(
   return [header, ...rows].join("\n")
 }
 
-export function exportFilename(date = new Date()): string {
-  return `payments-${date.toISOString().slice(0, 10)}.csv`
+/** The label must come from an allowlisted value, never raw client text. */
+export function exportFilename(date = new Date(), label?: string): string {
+  const stamp = date.toISOString().slice(0, 10)
+  return label ? `payments-${label}-${stamp}.csv` : `payments-${stamp}.csv`
 }
