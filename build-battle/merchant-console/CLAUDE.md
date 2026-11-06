@@ -8,18 +8,22 @@ Northwind Payments is fictional. Every merchant, cardholder, amount, and card in
 
 ```bash
 npm install
-npm run dev
+npm run dev      # http://localhost:3000, / redirects to /overview
+npm test         # vitest, tests live beside the code in src/lib/*.test.ts
+npm run lint
 ```
+
+Stack: Next.js 15 (App Router), React 19, TypeScript, Tailwind, Tremor-style components, Radix primitives.
 
 No database, no seed step, no Docker.
 
 ## Data lives in memory
 
-Seed data is JSON, loaded into a store module at boot. Route handlers read and write that store.
+Seed data is generated deterministically by `src/data/generate.ts` (fixed `SEED`) and loaded into the store in `src/data/store.ts` at boot. Route handlers read and write that store.
 
 - Writes last for the life of the dev server and vanish on restart. That is expected.
 - Persistence is tracked separately as NWP-203. **Do not add a database, an ORM, or migrations.**
-- If you need more seed data, add it to the JSON. Never edit seed data to make a failing case disappear.
+- If you need more seed data, extend the generator. Never edit seed data to make a failing case disappear.
 
 ## Where the rest of the context lives
 
@@ -53,10 +57,16 @@ These four explain most of the code, and breaking them is how bugs get in here.
 | --- | --- |
 | `src/app/` | Console routes: overview, payments, disputes, payouts. Cards is NWP-201 and does not exist yet |
 | `src/app/api/` | Route handlers |
-| `src/data/` | Seed JSON, the in-memory store, and types |
-| `src/components/` | Tremor-based primitives and the console's own components |
+| `src/data/` | Seed generator, the in-memory store, query builder (`queries.ts`), metrics, and types |
+| `src/components/` | Tremor-based primitives and the console's own components. There is no `Dialog` yet; `Drawer.tsx` wraps the Radix dialog |
 | `src/lib/` | Money, date, and CSV helpers, each with a `.test.ts` beside it. Read these before touching an amount |
 
 ## Before you push
 
 Run `npm test`, then `/ship-ready`. The skill checks the rules above, not just formatting.
+
+## Release Standards
+
+- All changes need test evidence before merging: the PR shows the tests that cover the change and that `npm test` passes.
+- No direct commits to `main`. Every change goes through a branch named after its ticket and a pull request.
+- Every PR includes a one-line business impact summary: who benefits and how.
