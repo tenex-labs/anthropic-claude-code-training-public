@@ -1,6 +1,10 @@
+import { utcDayKey } from "@/lib/dates"
 import { merchantById } from "./merchants"
 import { store } from "./store"
 import { Payment, PaymentFilters, PaymentStatus } from "./types"
+
+/** A bare `YYYY-MM-DD`, as opposed to a full ISO timestamp. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 const STATUSES: readonly (PaymentStatus | "all")[] = [
   "all",
@@ -45,12 +49,20 @@ export const PAGE_SIZE = 20
 export function filterPayments(filters: PaymentFilters): Payment[] {
   const { status, merchantId, search, from, to } = filters
   const needle = search?.trim().toLowerCase()
+  // A date-only `to` covers that whole UTC day, so it is compared by day.
+  // Compared as an instant, it would mean midnight and drop the day itself.
+  const toIsDay = to !== undefined && DATE_ONLY.test(to)
 
   return store.payments.filter((payment) => {
     if (status && status !== "all" && payment.status !== status) return false
     if (merchantId && payment.merchantId !== merchantId) return false
     if (from && payment.createdAt < from) return false
-    if (to && payment.createdAt > to) return false
+    if (to) {
+      const createdAt = toIsDay
+        ? utcDayKey(payment.createdAt)
+        : payment.createdAt
+      if (createdAt > to) return false
+    }
 
     if (needle) {
       const merchant = merchantById(payment.merchantId)
@@ -77,8 +89,9 @@ export function sortPayments(
   const factor = direction === "asc" ? 1 : -1
   return [...payments].sort((a, b) => {
     if (sort === "amount") {
-      // Sort by the formatted amount so the order matches what the table shows.
-      return String(a.amount).localeCompare(String(b.amount)) * factor
+      // Amounts are integer minor units, so compare them as numbers. Compared
+      // as text, 994 would sort above 9873.
+      return (a.amount - b.amount) * factor
     }
     return a.createdAt.localeCompare(b.createdAt) * factor
   })
