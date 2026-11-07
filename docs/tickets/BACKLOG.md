@@ -33,3 +33,19 @@ Merchants ask why they did not receive an event. Support has no way to answer wi
 **Type** Story · **Status** Backlog · **Priority** Medium
 
 A screen that compares a payout's recorded net against the sum of its line items and shows the delta. Would have caught [NWP-102](NWP-102.md) before a merchant did.
+
+## NWP-206 · Sorting payments by amount sorts as text
+
+**Type** Bug · **Status** Backlog · **Priority** Medium
+
+`sortPayments` in `src/data/queries.ts` compares `String(a.amount).localeCompare(String(b.amount))`, so amounts sort as text: `10000` ($100.00) comes before `2500` ($25.00). Anything that passes `sort=amount` gets the wrong order, including the CSV export. It also compares across currencies without saying so.
+
+Found while planning [NWP-101](NWP-101.md). Referenced as out of scope by its spec.
+
+## NWP-207 · Payments table builds its own filters
+
+**Type** Bug · **Status** Backlog · **Priority** Low
+
+`src/app/payments/page.tsx` builds `PaymentFilters` by hand instead of calling `parseFilters`, so the table ignores `from`, `to`, `sort` and `direction` while the export and `GET /api/payments` honour them. With any of those in the URL, the table footer and the export panel count disagree. The console's own rules call a second filter path a bug.
+
+Found while building [NWP-101](NWP-101.md). Referenced as out of scope by its spec.
