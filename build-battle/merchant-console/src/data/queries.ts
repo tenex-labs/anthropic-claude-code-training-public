@@ -105,6 +105,23 @@ export function queryPayments(filters: PaymentFilters) {
   return paginate(sorted, filters.page, filters.pageSize)
 }
 
+/**
+ * Export scope on top of the same builder. "all" drops every filter but keeps
+ * the sort; "filter" uses the filters as given. Both the export route and the
+ * row count on /payments call this, so the count matches the file.
+ */
+export function filtersForScope(
+  filters: PaymentFilters,
+  scope: "filter" | "all",
+): PaymentFilters {
+  if (scope === "filter") return filters
+  return {
+    ...parseFilters(new URLSearchParams()),
+    sort: filters.sort,
+    direction: filters.direction,
+  }
+}
+
 export function paymentById(id: string) {
   return store.payments.find((p) => p.id === id) ?? null
 }
