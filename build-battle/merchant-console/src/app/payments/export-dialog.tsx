@@ -19,7 +19,7 @@ import {
   ExportScope,
 } from "@/lib/csv"
 import { Download } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 
 const COLUMN_LABELS: Record<ExportColumn, string> = {
   id: "Payment ID",
@@ -53,6 +53,7 @@ export function ExportDialog({
   /** Rows each scope will export, from the same query builder as the route. */
   counts: Record<ExportScope, number>
 }) {
+  const columnsLabelId = useId()
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<ExportScope>("filter")
   const [selected, setSelected] = useState<ExportColumn[]>([
@@ -128,26 +129,33 @@ export function ExportDialog({
             </div>
           </fieldset>
 
-          <fieldset>
+          {/* A fieldset only takes its name from a legend that is its first
+              child, which would split the heading from these buttons. */}
+          <div role="group" aria-labelledby={columnsLabelId}>
             <div className="flex items-center justify-between">
-              <legend className="text-sm font-medium text-gray-900 dark:text-gray-50">
+              <span
+                id={columnsLabelId}
+                className="text-sm font-medium text-gray-900 dark:text-gray-50"
+              >
                 Columns
-              </legend>
-              <div className="flex gap-3 text-xs">
-                <button
+              </span>
+              <div className="flex gap-1">
+                <Button
                   type="button"
-                  className="text-blue-600 hover:underline dark:text-blue-500"
+                  variant="ghost"
+                  className="px-1.5 py-0.5 text-xs text-blue-600 dark:text-blue-500"
                   onClick={() => setSelected([...EXPORT_COLUMNS])}
                 >
                   Select all
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="text-blue-600 hover:underline dark:text-blue-500"
+                  variant="ghost"
+                  className="px-1.5 py-0.5 text-xs text-blue-600 dark:text-blue-500"
                   onClick={() => setSelected([])}
                 >
                   Clear
-                </button>
+                </Button>
               </div>
             </div>
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -166,7 +174,7 @@ export function ExportDialog({
                 </label>
               ))}
             </div>
-          </fieldset>
+          </div>
         </DialogBody>
 
         <DialogFooter>

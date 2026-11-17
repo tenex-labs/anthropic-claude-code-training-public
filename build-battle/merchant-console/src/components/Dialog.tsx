@@ -44,12 +44,12 @@ const DialogContent = React.forwardRef<
 ))
 DialogContent.displayName = "DialogContent"
 
-const DialogHeader = ({
-  children,
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+const DialogHeader = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<"div">
+>(({ children, className, ...props }, ref) => (
   <div
+    ref={ref}
     className="flex items-start justify-between gap-x-4 border-b border-gray-200 pb-4 dark:border-gray-900"
     {...props}
   >
@@ -66,7 +66,7 @@ const DialogHeader = ({
       </Button>
     </DialogPrimitives.Close>
   </div>
-)
+))
 DialogHeader.displayName = "DialogHeader"
 
 const DialogTitle = React.forwardRef<
@@ -96,12 +96,12 @@ const DialogDescription = React.forwardRef<
 ))
 DialogDescription.displayName = "DialogDescription"
 
-const DialogBody = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cx("flex-1 py-4", className)} {...props} />
-)
+const DialogBody = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<"div">
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cx("flex-1 py-4", className)} {...props} />
+))
 DialogBody.displayName = "DialogBody"
 
 const DialogFooter = ({

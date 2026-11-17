@@ -11,11 +11,15 @@ import { NextRequest, NextResponse } from "next/server"
 /**
  * Exports the payments table as CSV.
  *
- * Query parameters, all validated here before anything is read:
- * - `scope`: `filter` (default) honors the payments filters; `all` ignores them.
- * - `columns`: comma-separated names from EXPORT_COLUMNS, in output order.
- *   Missing means the default set, which leaves out the card last four.
- * - the usual payments filters, read by parseFilters.
+ * Query parameters:
+ * - `scope`: allowlisted here. `filter` (default) honors the payments
+ *   filters; `all` ignores them.
+ * - `columns`: allowlisted here. Comma-separated names from EXPORT_COLUMNS,
+ *   in output order. Missing means the default set, which leaves out the
+ *   card last four.
+ * - the payments filters, read by parseFilters. It allowlists status, sort
+ *   and direction. merchantId, search, from and to pass through unchecked;
+ *   they are only compared in memory and never reach the filename.
  *
  * Rows go through the shared query builder unpaginated, so the file holds
  * every matching payment rather than the page on screen.
