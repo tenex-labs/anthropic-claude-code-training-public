@@ -79,6 +79,19 @@ describe("toCsv", () => {
     )
   })
 
+  it("neutralises cells a spreadsheet would run as a formula", () => {
+    for (const lead of ["=", "+", "-", "@"]) {
+      const risky = { ...payment, description: `${lead}HYPERLINK("http://x","y")` }
+      expect(toCsv([risky], ["description"]).split("\n")[1]).toBe(
+        `"'${lead}HYPERLINK(""http://x"",""y"")"`,
+      )
+    }
+  })
+
+  it("leaves ordinary cells unquoted", () => {
+    expect(toCsv([payment], ["id", "status"]).split("\n")[1]).toBe("pay_0001,captured")
+  })
+
   it("emits a header even with no rows", () => {
     expect(toCsv([], ["id"])).toBe("id")
   })
@@ -164,5 +177,14 @@ describe("export scope", () => {
     expect(exportScopeLabel("filtered", { status: "all", search: "coffee" })).toBe("filtered")
     expect(exportScopeLabel("filtered", { status: "all" })).toBe("all")
     expect(exportScopeLabel("all", { status: "disputed" })).toBe("all")
+  })
+
+  it("does not name a narrowed export after its status alone", () => {
+    expect(exportScopeLabel("filtered", { status: "disputed", merchantId: "mch_03" })).toBe(
+      "disputed-filtered",
+    )
+    expect(exportScopeLabel("filtered", { status: "disputed", search: "coffee" })).toBe(
+      "disputed-filtered",
+    )
   })
 })

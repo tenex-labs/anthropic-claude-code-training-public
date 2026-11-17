@@ -76,18 +76,29 @@ export function parseExportScope(raw: string | null): ParseResult<ExportScope> {
 }
 
 /**
- * The scope part of the filename, built only from validated values: the
- * status when one is set, "filtered" for any other filter, otherwise "all".
+ * The scope part of the filename, built only from validated values. A status
+ * filter names the file; any other filter adds "filtered", so a narrowed
+ * export is never named as if it held every payment with that status.
  */
 export function exportScopeLabel(scope: ExportScope, filters: PaymentFilters): string {
   if (scope === "all") return "all"
-  if (filters.status && filters.status !== "all") return filters.status
-  const filtered = Boolean(filters.merchantId || filters.search || filters.from || filters.to)
-  return filtered ? "filtered" : "all"
+  const status = filters.status && filters.status !== "all" ? filters.status : null
+  const narrowed = Boolean(filters.merchantId || filters.search || filters.from || filters.to)
+  if (status && narrowed) return `${status}-filtered`
+  if (status) return status
+  return narrowed ? "filtered" : "all"
 }
 
-function escapeCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
+/**
+ * Spreadsheets run a cell as a formula when it starts with one of these.
+ * The export goes to merchants, so such cells are prefixed with an
+ * apostrophe and read as text (OWASP CSV injection guidance).
+ */
+const FORMULA_PREFIX = /^[=+\-@\t\r]/
+
+function escapeCell(raw: string): string {
+  const value = FORMULA_PREFIX.test(raw) ? `'${raw}` : raw
+  if (/[",\n]/.test(value) || value !== raw) return `"${value.replace(/"/g, '""')}"`
   return value
 }
 
