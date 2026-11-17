@@ -51,7 +51,7 @@ Keep the export on the server and add two validated options to the existing rout
 | `src/lib/csv.ts` | change | Add default column list, column and scope parsing, scope-aware `exportFilename()` |
 | `src/app/api/payments/export/route.ts` | change | Read and validate `columns` and `scope`, return 400 on bad input, use the new filename |
 | `src/app/payments/export-dialog.tsx` | add | Client dialog: columns, scope, row count, Download |
-| `src/app/payments/page.tsx` | change | Swap the Export link for the dialog, compute both counts via the query builder |
+| `src/app/payments/page.tsx` | change | Swap the Export link for the dialog. Parse filters once with `parseFilters()` for the table, the panel's counts and the export, replacing the hand-built parse |
 | `src/components/Drawer.tsx` | change | Give the icon-only close button an accessible name (found by `/ship-ready`). The export dialog inherits it |
 | `src/lib/csv.test.ts` | change | Tests for column selection, the default, an empty selection, scope, and filename |
 
@@ -76,15 +76,18 @@ Keep the export on the server and add two validated options to the existing rout
 
 ## Risks
 
-- **Count and file disagree** if the page and route parse filters differently. Mitigation: both go through `parseFilters()` + `filterPayments()`.
+- **Count and file disagree** if the page and route parse filters differently. Mitigation: the page and the route both use `parseFilters()`, and the table total is the panel's "current filter" count.
 - **Filename injection** through the `content-disposition` header. Mitigation: the label is only ever `all`, `filtered`, or an allowlisted status.
 
 ## Out of scope
 
 - `sortPayments()` compares amounts as strings (`src/data/queries.ts:79-82`), so amount-sorted exports are misordered. A real bug, but a separate fix.
-- The Payments page reads filters by hand rather than with `parseFilters()` (`src/app/payments/page.tsx:36-43`). Only the new counts use the shared parser.
 - Per-user saved column presets and other export formats.
 
 ## Open questions
 
 - Should "current filter" with no filters applied be labelled `filtered` or `all` in the filename? Proposed: `filtered`, because it tells the reader which option was picked.
+
+## Decision log
+
+- **2026-11-17: the Payments page now parses filters with `parseFilters()`.** This was originally out of scope. The org-standards review (#3, #6) and `/code-review` both found that the table total and the export panel's count were derived two ways. With a date filter in the address, the table showed 1,658 payments while the panel and file showed 167. Moved in scope because this PR introduced the second number.

@@ -11,7 +11,7 @@ import {
 import { StatusBadge } from "@/components/ui/payments/StatusBadge"
 import { merchantById, merchants } from "@/data/merchants"
 import { filterPayments, parseFilters, queryPayments } from "@/data/queries"
-import { PaymentFilters, PaymentStatus } from "@/data/types"
+import { PaymentStatus } from "@/data/types"
 import { filtersForScope } from "@/lib/csv"
 import { formatDate } from "@/lib/dates"
 import { formatMoney } from "@/lib/money"
@@ -34,27 +34,15 @@ export default async function PaymentsPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const params = await searchParams
-  const filters: PaymentFilters = {
-    status: (STATUSES.includes(params.status as PaymentStatus)
-      ? params.status
-      : "all") as PaymentFilters["status"],
-    merchantId: params.merchantId || undefined,
-    search: params.search || undefined,
-    page: Number(params.page ?? "1") || 1,
-  }
-
-  const { rows, total, page, pageCount } = queryPayments(filters)
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][],
   )
 
-  // Row counts for the export dialog. Same parser, scope rule and query
-  // builder as the export route, so the number shown matches the file.
-  const exportFilters = parseFilters(query)
-  const filteredCount = filterPayments(
-    filtersForScope(exportFilters, "filtered"),
-  ).length
-  const allCount = filterPayments(filtersForScope(exportFilters, "all")).length
+  // One parse for the whole page, the same one the export route uses, so the
+  // table total, the export panel's count and the downloaded file agree.
+  const filters = parseFilters(query)
+  const { rows, total, page, pageCount } = queryPayments(filters)
+  const allCount = filterPayments(filtersForScope(filters, "all")).length
 
   const pageHref = (next: number) => {
     const q = new URLSearchParams(query)
@@ -76,7 +64,7 @@ export default async function PaymentsPage({
         />
         <ExportDialog
           query={query.toString()}
-          filteredCount={filteredCount}
+          filteredCount={total}
           allCount={allCount}
         />
       </div>
