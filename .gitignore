@@ -2,3 +2,6 @@
 # Local database and build output for the merchant console
 *.db
 *.db-journal
+
+# Personal Claude Code instructions for this project only
+CLAUDE.local.md

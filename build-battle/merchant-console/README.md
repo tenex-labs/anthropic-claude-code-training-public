@@ -41,7 +41,7 @@ Read [`CLAUDE.md`](./CLAUDE.md) before writing code. The short version:
 | `src/app/` | The console routes: overview, payments, disputes, payouts |
 | `src/app/api/` | Route handlers. The query builder behind `GET /api/payments` is the one to reuse |
 | `src/components/` | Tremor-based UI primitives and the console's own components |
-| `src/data/` | Seed JSON, the in-memory store, and types |
+| `src/data/` | The seed data generator, the in-memory store, and types |
 | `src/lib/` | Money, date, and CSV helpers, each with a `.test.ts` beside it |
 
 ## Your ticket

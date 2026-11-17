@@ -69,6 +69,11 @@ export function filterPayments(filters: PaymentFilters): Payment[] {
   })
 }
 
+/** How many payments exist, without building a filtered copy. */
+export function countPayments() {
+  return store.payments.length
+}
+
 export function sortPayments(
   payments: Payment[],
   sort: PaymentFilters["sort"] = "createdAt",
@@ -115,4 +120,24 @@ export function refundsForPayment(paymentId: string) {
 
 export function disputeForPayment(paymentId: string) {
   return store.disputes.find((d) => d.paymentId === paymentId) ?? null
+}
+
+/**
+ * The inverse of `parseFilters`: the query string that reads back as these
+ * filters. Defaults are left out, and page is never included. Anything that
+ * links to an export of "what is on screen" builds its link from this, so the
+ * list of filter parameters lives in one place.
+ */
+export function filtersToParams(filters: PaymentFilters): URLSearchParams {
+  const params = new URLSearchParams()
+  if (filters.status && filters.status !== "all") {
+    params.set("status", filters.status)
+  }
+  if (filters.merchantId) params.set("merchantId", filters.merchantId)
+  if (filters.search) params.set("search", filters.search)
+  if (filters.from) params.set("from", filters.from)
+  if (filters.to) params.set("to", filters.to)
+  if (filters.sort === "amount") params.set("sort", "amount")
+  if (filters.direction === "asc") params.set("direction", "asc")
+  return params
 }
