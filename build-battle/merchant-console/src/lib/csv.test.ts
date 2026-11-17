@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  exportScopeLabel,
+  parseExportColumns,
+  parseExportScope,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -71,6 +79,19 @@ describe("toCsv", () => {
     )
   })
 
+  it("neutralises cells a spreadsheet would run as a formula", () => {
+    for (const lead of ["=", "+", "-", "@"]) {
+      const risky = { ...payment, description: `${lead}HYPERLINK("http://x","y")` }
+      expect(toCsv([risky], ["description"]).split("\n")[1]).toBe(
+        `"'${lead}HYPERLINK(""http://x"",""y"")"`,
+      )
+    }
+  })
+
+  it("leaves ordinary cells unquoted", () => {
+    expect(toCsv([payment], ["id", "status"]).split("\n")[1]).toBe("pay_0001,captured")
+  })
+
   it("emits a header even with no rows", () => {
     expect(toCsv([], ["id"])).toBe("id")
   })
@@ -80,6 +101,90 @@ describe("exportFilename", () => {
   it("stamps the UTC date, so two exports on the same day collide by design", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
+    )
+  })
+
+  it("puts the scope label before the date", () => {
+    expect(exportFilename(new Date("2026-08-13T12:00:00.000Z"), "disputed")).toBe(
+      "payments-disputed-2026-08-13.csv",
+    )
+  })
+
+  it("strips anything from the label that could break the header", () => {
+    expect(exportFilename(new Date("2026-08-13T12:00:00.000Z"), 'x";\r\n/..')).toBe(
+      "payments-x-2026-08-13.csv",
+    )
+  })
+})
+
+describe("column selection (NWP-101)", () => {
+  it("writes a subset of columns in the order requested", () => {
+    const columns = parseExportColumns("amount,status,id")
+    expect(columns).toEqual({ ok: true, value: ["amount", "status", "id"] })
+    if (!columns.ok) return
+    expect(toCsv([payment], columns.value)).toBe(
+      ["amount,status,id", "$250.00,captured,pay_0001"].join("\n"),
+    )
+  })
+
+  it("excludes the card last four by default", () => {
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    const columns = parseExportColumns(null)
+    expect(columns).toEqual({ ok: true, value: [...DEFAULT_EXPORT_COLUMNS] })
+    if (!columns.ok) return
+    const csv = toCsv([payment], columns.value)
+    expect(csv.split("\n")[0]).not.toContain("last4")
+    expect(csv).not.toContain("4242")
+  })
+
+  it("keeps every other column in the default set", () => {
+    expect([...DEFAULT_EXPORT_COLUMNS, "last4"].sort()).toEqual([...EXPORT_COLUMNS].sort())
+  })
+
+  it("rejects an empty selection rather than producing an empty file", () => {
+    expect(parseExportColumns("")).toEqual({
+      ok: false,
+      error: "Choose at least one column to export.",
+    })
+    expect(parseExportColumns(" , ,")).toMatchObject({ ok: false })
+  })
+
+  it("rejects an unknown column without echoing it back", () => {
+    const result = parseExportColumns("id,card_number")
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).not.toContain("card_number")
+  })
+
+  it("drops duplicate columns and keeps the first position", () => {
+    expect(parseExportColumns("id,amount,id")).toEqual({ ok: true, value: ["id", "amount"] })
+  })
+})
+
+describe("export scope", () => {
+  it("defaults to the current filter", () => {
+    expect(parseExportScope(null)).toEqual({ ok: true, value: "filtered" })
+    expect(parseExportScope("")).toEqual({ ok: true, value: "filtered" })
+  })
+
+  it("accepts all and rejects anything else", () => {
+    expect(parseExportScope("all")).toEqual({ ok: true, value: "all" })
+    expect(parseExportScope("everything")).toMatchObject({ ok: false })
+  })
+
+  it("labels the file by status, other filters, or all", () => {
+    expect(exportScopeLabel("filtered", { status: "disputed" })).toBe("disputed")
+    expect(exportScopeLabel("filtered", { status: "all", search: "coffee" })).toBe("filtered")
+    expect(exportScopeLabel("filtered", { status: "all" })).toBe("all")
+    expect(exportScopeLabel("all", { status: "disputed" })).toBe("all")
+  })
+
+  it("does not name a narrowed export after its status alone", () => {
+    expect(exportScopeLabel("filtered", { status: "disputed", merchantId: "mch_03" })).toBe(
+      "disputed-filtered",
+    )
+    expect(exportScopeLabel("filtered", { status: "disputed", search: "coffee" })).toBe(
+      "disputed-filtered",
     )
   })
 })
