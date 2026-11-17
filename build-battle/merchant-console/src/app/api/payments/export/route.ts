@@ -1,25 +1,52 @@
-import { filterPayments, parseFilters, sortPayments } from "@/data/queries"
-import { exportFilename, toCsv } from "@/lib/csv"
-import { NextRequest } from "next/server"
+import { parseFilters, selectExportRows } from "@/data/queries"
+import { exportFilename, parseExportColumns, toCsv } from "@/lib/csv"
+import { NextRequest, NextResponse } from "next/server"
+
+const SCOPES = ["filter", "all"] as const
+
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 })
+}
 
 /**
- * Exports the payments table as CSV.
+ * Exports payments as CSV. Everything is decided here, on the server, from the
+ * one query builder in src/data/queries.ts: the dialog only builds a URL, so
+ * the file never depends on which page of the table is on screen.
  *
- * Honors the active filters and reuses the query builder, but the column set
- * and the scope are fixed. Giving ops control over both is NWP-101.
+ *   columns  comma-separated, checked against EXPORT_COLUMNS (default: no last4)
+ *   scope    "filter" (default) uses the table's filters; "all" ignores them
  */
 export function GET(request: NextRequest) {
-  const filters = parseFilters(request.nextUrl.searchParams)
-  const rows = sortPayments(
-    filterPayments(filters),
-    filters.sort,
-    filters.direction,
-  )
+  const params = request.nextUrl.searchParams
 
-  return new Response(toCsv(rows), {
+  const scope = params.get("scope") ?? "filter"
+  if (!(SCOPES as readonly string[]).includes(scope)) {
+    return badRequest("Unknown export scope.")
+  }
+
+  const parsed = parseExportColumns(params.get("columns"))
+  if (!parsed.ok) return badRequest(parsed.error)
+
+  const filters = parseFilters(
+    scope === "all" ? new URLSearchParams() : params,
+  )
+  const rows = selectExportRows(filters)
+
+  // Built only from allowlisted values, never from raw input.
+  const narrowed = Boolean(
+    filters.merchantId || filters.search || filters.from || filters.to,
+  )
+  const label =
+    scope === "all" || (!narrowed && filters.status === "all")
+      ? "all"
+      : !narrowed
+        ? String(filters.status)
+        : "filtered"
+
+  return new Response(toCsv(rows, parsed.columns), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${exportFilename()}"`,
+      "content-disposition": `attachment; filename="${exportFilename(new Date(), label)}"`,
     },
   })
 }

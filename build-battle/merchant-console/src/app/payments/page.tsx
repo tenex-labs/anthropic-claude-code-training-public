@@ -10,12 +10,13 @@ import {
 } from "@/components/Table"
 import { StatusBadge } from "@/components/ui/payments/StatusBadge"
 import { merchantById, merchants } from "@/data/merchants"
-import { queryPayments } from "@/data/queries"
+import { filterPayments, parseFilters, queryPayments } from "@/data/queries"
 import { PaymentFilters, PaymentStatus } from "@/data/types"
 import { formatDate } from "@/lib/dates"
+import { DEFAULT_EXPORT_COLUMNS, EXPORT_COLUMNS } from "@/lib/csv"
 import { formatMoney } from "@/lib/money"
-import { Download } from "lucide-react"
 import Link from "next/link"
+import { ExportDialog } from "./export-dialog"
 import { PaymentsFilterBar } from "./filter-bar"
 
 const STATUSES: (PaymentStatus | "all")[] = [
@@ -47,6 +48,13 @@ export default async function PaymentsPage({
     Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][],
   )
 
+  // The export route sees these same params, so the count shown in the dialog
+  // is the number of rows it will write. Page is dropped: exports are not paged.
+  const exportQuery = new URLSearchParams(query)
+  exportQuery.delete("page")
+  const exportFilterCount = filterPayments(parseFilters(exportQuery)).length
+  const exportAllCount = filterPayments(parseFilters(new URLSearchParams())).length
+
   const pageHref = (next: number) => {
     const q = new URLSearchParams(query)
     q.set("page", String(next))
@@ -65,15 +73,13 @@ export default async function PaymentsPage({
             search: filters.search ?? "",
           }}
         />
-        <Button variant="secondary" className="w-full gap-2 py-1.5 sm:w-fit" asChild>
-          <a href={`/api/payments/export?${query.toString()}`}>
-            <Download
-              className="-ml-0.5 size-4 shrink-0 text-gray-400 dark:text-gray-600"
-              aria-hidden="true"
-            />
-            Export
-          </a>
-        </Button>
+        <ExportDialog
+          columns={[...EXPORT_COLUMNS]}
+          defaultColumns={[...DEFAULT_EXPORT_COLUMNS]}
+          filterCount={exportFilterCount}
+          allCount={exportAllCount}
+          filterQuery={exportQuery.toString()}
+        />
       </div>
 
       <TableRoot className="border-t border-gray-200 dark:border-gray-800">

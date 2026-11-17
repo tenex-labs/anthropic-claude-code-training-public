@@ -105,6 +105,14 @@ export function queryPayments(filters: PaymentFilters) {
   return paginate(sorted, filters.page, filters.pageSize)
 }
 
+/**
+ * Every row the filters match, sorted, with no pagination. The export uses
+ * this so a file is never limited to the page on screen.
+ */
+export function selectExportRows(filters: PaymentFilters): Payment[] {
+  return sortPayments(filterPayments(filters), filters.sort, filters.direction)
+}
+
 export function paymentById(id: string) {
   return store.payments.find((p) => p.id === id) ?? null
 }
