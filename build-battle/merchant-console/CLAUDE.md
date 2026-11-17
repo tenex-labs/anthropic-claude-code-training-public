@@ -13,6 +13,19 @@ npm run dev
 
 No database, no seed step, no Docker.
 
+## Commands
+
+Run from `build-battle/merchant-console/`.
+
+| What | Command |
+| --- | --- |
+| Dev server (port 3000, `/` redirects to `/overview`) | `npm run dev` |
+| All tests (Vitest, node env, `src/**/*.test.ts`) | `npm test` |
+| One test file | `npx vitest run src/lib/csv.test.ts` |
+| One test by name | `npx vitest run src/lib/csv.test.ts -t "exportFilename"` |
+| Typecheck (no script for it) | `npx tsc --noEmit` |
+| Lint | `npm run lint` |
+
 ## Data lives in memory
 
 Seed data is JSON, loaded into a store module at boot. Route handlers read and write that store.
@@ -20,6 +33,14 @@ Seed data is JSON, loaded into a store module at boot. Route handlers read and w
 - Writes last for the life of the dev server and vanish on restart. That is expected.
 - Persistence is tracked separately as NWP-203. **Do not add a database, an ORM, or migrations.**
 - If you need more seed data, add it to the JSON. Never edit seed data to make a failing case disappear.
+
+## How data flows
+
+- `src/data/generate.ts` builds deterministic seed data (fixed seed, 120 days, ~14 payments/day), so every machine sees identical records and a bug reproduces the same everywhere.
+- `src/data/store.ts` holds it in memory on `globalThis`, so dev-server hot reloads don't hand each request a fresh copy.
+- `src/data/queries.ts` is the query builder: `parseFilters()` (allowlist for status/sort/direction/page) → `filterPayments()` → `sortPayments()` → `paginate()`. `queryPayments()` composes all four.
+- Pages under `src/app/` are server components that call the query builder directly. Route handlers under `src/app/api/` call the same functions.
+- The CSV export (`/api/payments/export`) filters and sorts but skips `paginate()`, so it already returns every matching row. Columns come from `EXPORT_COLUMNS` in `src/lib/csv.ts`.
 
 ## Where the rest of the context lives
 
