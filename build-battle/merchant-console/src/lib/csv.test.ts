@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  exportScopeLabel,
+  parseExportOptions,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -81,5 +88,86 @@ describe("exportFilename", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
     )
+  })
+
+  it("puts the scope label between the prefix and the date", () => {
+    expect(exportFilename(new Date("2026-08-13T09:00:00.000Z"), "disputed")).toBe(
+      "payments-disputed-2026-08-13.csv",
+    )
+  })
+})
+
+// NWP-101: ops chooses the columns. These pin the serializer's side of that.
+describe("column selection", () => {
+  const params = (query: string) => new URLSearchParams(query)
+
+  it("writes a subset of columns in the requested order, not the default order", () => {
+    const [header, row] = toCsv([payment], ["currency", "id", "amount"]).split("\n")
+    expect(header).toBe("currency,id,amount")
+    expect(row).toBe("USD,pay_0001,$250.00")
+  })
+
+  it("keeps the requested order through validation and drops duplicates", () => {
+    const options = parseExportOptions(params("columns=amount,id,amount,status"))
+    expect(options).toEqual({
+      ok: true,
+      columns: ["amount", "id", "status"],
+      scope: "filtered",
+    })
+  })
+
+  it("excludes card last four by default", () => {
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    expect(DEFAULT_EXPORT_COLUMNS).toHaveLength(EXPORT_COLUMNS.length - 1)
+
+    const options = parseExportOptions(params(""))
+    if (!options.ok) throw new Error(options.message)
+    expect(options.columns).not.toContain("last4")
+
+    const csv = toCsv([payment], options.columns)
+    expect(csv.split("\n")[0].split(",")).not.toContain("last4")
+    expect(csv).not.toContain("4242")
+  })
+
+  it("still includes last four when ops asks for it", () => {
+    const options = parseExportOptions(params("columns=id,last4"))
+    expect(options).toMatchObject({ ok: true, columns: ["id", "last4"] })
+  })
+
+  it("rejects an empty selection rather than producing an empty file", () => {
+    expect(parseExportOptions(params("columns="))).toEqual({
+      ok: false,
+      message: "Choose at least one column to export.",
+    })
+    expect(parseExportOptions(params("columns=,,"))).toMatchObject({ ok: false })
+    expect(() => toCsv([payment], [])).toThrow(RangeError)
+  })
+
+  it("rejects a column that is not on the allowlist", () => {
+    expect(parseExportOptions(params("columns=id,card_number"))).toEqual({
+      ok: false,
+      message: 'Unknown export column "card_number".',
+    })
+  })
+
+  it("defaults scope to the current filter and rejects unknown scopes", () => {
+    expect(parseExportOptions(params("scope=all"))).toMatchObject({ ok: true, scope: "all" })
+    expect(parseExportOptions(params("scope=everything"))).toMatchObject({ ok: false })
+  })
+})
+
+describe("exportScopeLabel", () => {
+  it("labels an all-payments export as all, whatever the filters say", () => {
+    expect(exportScopeLabel("all", { status: "disputed" })).toBe("all")
+  })
+
+  it("builds the label from allowlisted filter values only", () => {
+    expect(exportScopeLabel("filtered", { status: "disputed" })).toBe("disputed")
+    expect(exportScopeLabel("filtered", { status: "all", merchantId: "mch_01" })).toBe("mch_01")
+    expect(exportScopeLabel("filtered", { search: "../etc/passwd" })).toBe("search")
+  })
+
+  it("leaves out a merchant the store does not know", () => {
+    expect(exportScopeLabel("filtered", { merchantId: 'x"; evil' })).toBe("filtered")
   })
 })
