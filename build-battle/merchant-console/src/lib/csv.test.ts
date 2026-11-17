@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  exportLabel,
+  parseExportColumns,
+  parseExportScope,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -81,5 +89,66 @@ describe("exportFilename", () => {
     expect(exportFilename(new Date("2026-03-14T23:00:00.000Z"))).toBe(
       "payments-2026-03-14.csv",
     )
+  })
+
+  it("names the scope ahead of the date", () => {
+    expect(exportFilename(new Date("2026-08-13T12:00:00.000Z"), "disputed")).toBe(
+      "payments-disputed-2026-08-13.csv",
+    )
+  })
+})
+
+/**
+ * NWP-101: the column list arrives from the client as `columns=a,b,c`, so it
+ * is parsed against an allowlist before toCsv ever sees it.
+ */
+describe("parseExportColumns", () => {
+  it("keeps a subset of columns in the order requested", () => {
+    const parsed = parseExportColumns("amount,id,currency")
+    expect(parsed).toEqual({ ok: true, columns: ["amount", "id", "currency"] })
+    if (!parsed.ok) return
+    expect(toCsv([payment], parsed.columns)).toBe(
+      ["amount,id,currency", "$250.00,pay_0001,USD"].join("\n"),
+    )
+  })
+
+  it("leaves the card last four out by default", () => {
+    const parsed = parseExportColumns(null)
+    expect(parsed).toEqual({ ok: true, columns: [...DEFAULT_EXPORT_COLUMNS] })
+    if (!parsed.ok) return
+    expect(parsed.columns).not.toContain("last4")
+
+    const [header, row] = toCsv([payment], parsed.columns).split("\n")
+    expect(header.split(",")).not.toContain("last4")
+    expect(row).not.toContain(payment.last4)
+  })
+
+  it("rejects an empty selection rather than writing an empty file", () => {
+    expect(parseExportColumns("")).toMatchObject({ ok: false })
+    expect(parseExportColumns(" , ")).toMatchObject({ ok: false })
+  })
+
+  it("rejects a column name that is not on the allowlist", () => {
+    expect(parseExportColumns("id,card_number")).toMatchObject({ ok: false })
+  })
+
+  it("rejects a column requested twice", () => {
+    expect(parseExportColumns("id,id")).toMatchObject({ ok: false })
+  })
+})
+
+describe("parseExportScope", () => {
+  it("defaults to the current filter and accepts only filter or all", () => {
+    expect(parseExportScope(null)).toBe("filter")
+    expect(parseExportScope("all")).toBe("all")
+    expect(parseExportScope("everything")).toBeNull()
+  })
+})
+
+describe("exportLabel", () => {
+  it("names the status, any other filter, or all", () => {
+    expect(exportLabel({ status: "disputed" })).toBe("disputed")
+    expect(exportLabel({ status: "all", merchantId: "mch_01" })).toBe("filtered")
+    expect(exportLabel({ status: "all" })).toBe("all")
   })
 })
