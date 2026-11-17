@@ -13,13 +13,31 @@ npm run dev
 
 No database, no seed step, no Docker.
 
+## Commands
+
+```bash
+npm test                                              # vitest run, all src/**/*.test.ts
+npx vitest run src/lib/csv.test.ts -t exportFilename  # one file, one test by name
+npm run test:watch
+npm run lint                                          # next lint (next/core-web-vitals)
+npm run build
+```
+
+Tests run in plain Node with no DOM, so they cover `src/lib/` and `src/data/` logic, not components. `@/` resolves to `src/`.
+
 ## Data lives in memory
 
-Seed data is JSON, loaded into a store module at boot. Route handlers read and write that store.
+The seed is code, not JSON. `src/data/generate.ts` builds the whole dataset at boot from a fixed-seed PRNG (120 days anchored to 2026-08-13 UTC), so every machine gets identical records. `src/data/store.ts` runs it once and caches the result on `globalThis.__northwindStore`, so dev-server reloads keep it. Merchants are a hand-written array in `src/data/merchants.ts`.
 
 - Writes last for the life of the dev server and vanish on restart. That is expected.
 - Persistence is tracked separately as NWP-203. **Do not add a database, an ORM, or migrations.**
-- If you need more seed data, add it to the JSON. Never edit seed data to make a failing case disappear.
+- If you need more seed data, extend `generate.ts` or `merchants.ts`. Never edit seed data to make a failing case disappear.
+
+## How a request flows
+
+- Pages under `src/app/` are server components that import from `src/data/` directly. They do not fetch the API.
+- The query builder is `src/data/queries.ts`: `parseFilters` → `filterPayments` → `sortPayments` → `paginate`, combined as `queryPayments`.
+- The only route handlers are `GET /api/payments` (JSON, paginated) and `GET /api/payments/export` (CSV via `src/lib/csv.ts`, same builder, no `paginate`).
 
 ## Where the rest of the context lives
 
@@ -45,7 +63,7 @@ These four explain most of the code, and breaking them is how bugs get in here.
 
 - Generated numbers use the `4242` test BIN and a valid Luhn check digit. Nothing here may resemble a real PAN.
 - The full number is returned exactly once, in the creation response. After that, last four only.
-- Status is a state machine: `active ⇄ frozen`, either to `cancelled`, and `cancelled` is terminal.
+- Status transitions and masking are in `.claude/rules/cards.md`.
 
 ## Layout
 
@@ -53,7 +71,7 @@ These four explain most of the code, and breaking them is how bugs get in here.
 | --- | --- |
 | `src/app/` | Console routes: overview, payments, disputes, payouts. Cards is NWP-201 and does not exist yet |
 | `src/app/api/` | Route handlers |
-| `src/data/` | Seed JSON, the in-memory store, and types |
+| `src/data/` | Seed generator, the in-memory store, the query builder, and types |
 | `src/components/` | Tremor-based primitives and the console's own components |
 | `src/lib/` | Money, date, and CSV helpers, each with a `.test.ts` beside it. Read these before touching an amount |
 

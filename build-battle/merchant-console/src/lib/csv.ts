@@ -1,13 +1,13 @@
 import { merchantById } from "@/data/merchants"
-import { Payment } from "@/data/types"
+import { Payment, PaymentStatus } from "@/data/types"
 import { formatMoney } from "./money"
 
 /**
  * CSV export for the payments table.
  *
- * The column set is fixed. Ops has asked for control over it — that is
- * NWP-101 — but today everyone gets every column, including the card
- * last four, whether or not the file is going to a merchant.
+ * Ops chooses the columns and the scope (NWP-101). Both arrive from the
+ * client, so the route runs them through the parsers below, which accept
+ * only allowlisted values. Card last four is off unless asked for.
  */
 
 export const EXPORT_COLUMNS = [
@@ -24,6 +24,61 @@ export const EXPORT_COLUMNS = [
 ] as const
 
 export type ExportColumn = (typeof EXPORT_COLUMNS)[number]
+
+/** Every column except card last four, which has to be opted into. */
+export const DEFAULT_EXPORT_COLUMNS: readonly ExportColumn[] = EXPORT_COLUMNS.filter(
+  (column) => column !== "last4",
+)
+
+const isExportColumn = (value: string): value is ExportColumn =>
+  (EXPORT_COLUMNS as readonly string[]).includes(value)
+
+/**
+ * Parses the `columns` query param against the allowlist.
+ *
+ * - Param absent: the default columns.
+ * - Otherwise: the requested columns in the requested order, duplicates
+ *   dropped. Any unknown name, or no columns at all, returns null so the
+ *   route can reject the request instead of writing an empty file.
+ * - An amount never ships without its currency: if `amount` is requested
+ *   without `currency`, `currency` is added right after it.
+ */
+export function parseExportColumns(raw: string | null): ExportColumn[] | null {
+  if (raw === null) return [...DEFAULT_EXPORT_COLUMNS]
+
+  const requested = raw
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+  if (requested.length === 0 || !requested.every(isExportColumn)) return null
+
+  return withCurrency([...new Set(requested)])
+}
+
+/** Adds `currency` right after `amount` when it is missing. */
+export function withCurrency(columns: ExportColumn[]): ExportColumn[] {
+  const amountAt = columns.indexOf("amount")
+  if (amountAt === -1 || columns.includes("currency")) return columns
+  return [
+    ...columns.slice(0, amountAt + 1),
+    "currency",
+    ...columns.slice(amountAt + 1),
+  ]
+}
+
+export const EXPORT_SCOPES = ["current", "all"] as const
+export type ExportScope = (typeof EXPORT_SCOPES)[number]
+
+/** Parses the `scope` query param. Absent means the current filter; anything unknown is null. */
+export function parseExportScope(raw: string | null): ExportScope | null {
+  if (raw === null) return "current"
+  return (EXPORT_SCOPES as readonly string[]).includes(raw)
+    ? (raw as ExportScope)
+    : null
+}
+
+/** What the filename says about the rows in it. Built only from validated values. */
+export type ExportLabel = "all" | "filtered" | PaymentStatus
 
 function escapeCell(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
@@ -66,6 +121,8 @@ export function toCsv(
   return [header, ...rows].join("\n")
 }
 
-export function exportFilename(date = new Date()): string {
-  return `payments-${date.toISOString().slice(0, 10)}.csv`
+/** `payments-disputed-2026-08-13.csv`, stamped with the UTC date. */
+export function exportFilename(date = new Date(), label?: ExportLabel): string {
+  const day = date.toISOString().slice(0, 10)
+  return label ? `payments-${label}-${day}.csv` : `payments-${day}.csv`
 }
