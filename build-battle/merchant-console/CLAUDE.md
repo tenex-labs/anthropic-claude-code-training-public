@@ -4,14 +4,19 @@ The internal tool support and ops staff use to look up a payment, refund it, wor
 
 Northwind Payments is fictional. Every merchant, cardholder, amount, and card in this app is generated.
 
-## Run it
+## Commands
 
-```bash
-npm install
-npm run dev
-```
+Run from `build-battle/merchant-console/`. No database, no seed step, no Docker.
 
-No database, no seed step, no Docker.
+| Command | What it does |
+| --- | --- |
+| `npm install` | Install dependencies |
+| `npm run dev` | Dev server on http://localhost:3000 |
+| `npm test` | Vitest, node environment, no DOM; runs `src/**/*.test.ts` |
+| `npx vitest run src/lib/csv.test.ts` | One test file |
+| `npx vitest run -t "<name>"` | Tests whose name matches |
+| `npm run lint` | `next lint` |
+| `npm run build` | Production build, which also type-checks |
 
 ## Data lives in memory
 
@@ -56,6 +61,13 @@ These four explain most of the code, and breaking them is how bugs get in here.
 | `src/data/` | Seed JSON, the in-memory store, and types |
 | `src/components/` | Tremor-based primitives and the console's own components |
 | `src/lib/` | Money, date, and CSV helpers, each with a `.test.ts` beside it. Read these before touching an amount |
+
+## How a request flows
+
+- Console pages are server components that call `src/data/queries.ts` directly. They do not fetch from `/api`.
+- `src/app/api/` has two route handlers today: `GET /api/payments` (JSON, paginated) and `GET /api/payments/export` (CSV, every matching row). Both start with `parseFilters`.
+- `queryPayments` = `filterPayments` → `sortPayments` → `paginate`. The export skips `paginate`.
+- `store.ts` keeps the generated data on `globalThis`, so hot reload keeps your writes and only a restart resets them.
 
 ## Before you push
 
