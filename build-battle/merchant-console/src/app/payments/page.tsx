@@ -11,7 +11,7 @@ import {
 import { StatusBadge } from "@/components/ui/payments/StatusBadge"
 import { merchantById, merchants } from "@/data/merchants"
 import { filterPayments, parseFilters, queryPayments } from "@/data/queries"
-import { PaymentFilters, PaymentStatus } from "@/data/types"
+import { PaymentStatus } from "@/data/types"
 import { formatDate } from "@/lib/dates"
 import { formatMoney } from "@/lib/money"
 import Link from "next/link"
@@ -33,23 +33,14 @@ export default async function PaymentsPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const params = await searchParams
-  const filters: PaymentFilters = {
-    status: (STATUSES.includes(params.status as PaymentStatus)
-      ? params.status
-      : "all") as PaymentFilters["status"],
-    merchantId: params.merchantId || undefined,
-    search: params.search || undefined,
-    page: Number(params.page ?? "1") || 1,
-  }
-
-  const { rows, total, page, pageCount } = queryPayments(filters)
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][],
   )
 
-  // Count what the export route will actually return for this URL, through
-  // the same parser and builder it uses.
-  const exportCount = filterPayments(parseFilters(query)).length
+  // One parse, shared with the export route, so the table, its footer count
+  // and the export dialog all describe the same set of payments.
+  const filters = parseFilters(query)
+  const { rows, total, page, pageCount } = queryPayments(filters)
 
   const pageHref = (next: number) => {
     const q = new URLSearchParams(query)
@@ -71,7 +62,7 @@ export default async function PaymentsPage({
         />
         <ExportDialog
           query={query.toString()}
-          filteredCount={exportCount}
+          filteredCount={total}
           totalCount={filterPayments({}).length}
         />
       </div>
