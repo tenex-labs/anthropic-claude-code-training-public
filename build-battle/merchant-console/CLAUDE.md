@@ -64,9 +64,9 @@ These four explain most of the code, and breaking them is how bugs get in here.
 
 ## How a request flows
 
-- Console pages are server components that call `src/data/queries.ts` directly. They do not fetch from `/api`.
-- `src/app/api/` has two route handlers today: `GET /api/payments` (JSON, paginated) and `GET /api/payments/export` (CSV, every matching row). Both start with `parseFilters`.
-- `queryPayments` = `filterPayments` → `sortPayments` → `paginate`. The export skips `paginate`.
+- Console pages are server components that call `src/data/queries.ts` directly. They do not `fetch` from `/api`; the only link to it is the Export `<a href>` on `/payments`, so a change to the export route or `parseFilters` affects that page.
+- `src/app/api/` has two route handlers today: `GET /api/payments` (JSON, paginated) and `GET /api/payments/export` (CSV, every matching row). Both start with `parseFilters`. The `/payments` page does not: it builds its own filter object, so keep its status, merchant, and search handling in step with `parseFilters`.
+- `queryPayments` = `filterPayments` → `sortPayments` → `paginate`. The export composes `filterPayments` and `sortPayments` itself to skip `paginate`, so a step added to `queryPayments` must be added to the export route too.
 - `store.ts` keeps the generated data on `globalThis`, so hot reload keeps your writes and only a restart resets them.
 
 ## Before you push
