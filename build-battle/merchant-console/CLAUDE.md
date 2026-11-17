@@ -4,22 +4,35 @@ The internal tool support and ops staff use to look up a payment, refund it, wor
 
 Northwind Payments is fictional. Every merchant, cardholder, amount, and card in this app is generated.
 
-## Run it
+## Commands
 
 ```bash
 npm install
-npm run dev
+npm run dev                                       # http://localhost:3000, redirects to /overview
+npm test                                          # vitest run: node environment, no DOM, only src/**/*.test.ts
+npx vitest run src/lib/csv.test.ts                # one file
+npx vitest run src/lib/csv.test.ts -t "header"    # one test by name
+npm run lint                                      # next lint
+npm run build                                     # next build, includes type-checking
 ```
 
 No database, no seed step, no Docker.
 
 ## Data lives in memory
 
-Seed data is JSON, loaded into a store module at boot. Route handlers read and write that store.
+There are no JSON seed files. `src/data/generate.ts` builds the data set in code from a fixed seed (`SEED = 20260813`, 120 days × 14 payments a day), so every machine gets identical records. `src/data/store.ts` holds the result on `globalThis`, so dev-server hot reloads keep the same data. Pages and route handlers read and write that store.
 
 - Writes last for the life of the dev server and vanish on restart. That is expected.
 - Persistence is tracked separately as NWP-203. **Do not add a database, an ORM, or migrations.**
-- If you need more seed data, add it to the JSON. Never edit seed data to make a failing case disappear.
+- If you need more seed data, extend the generator. Never edit seed data to make a failing case disappear.
+
+## How a payments request flows
+
+`src/data/queries.ts` is the query pipeline: `parseFilters` (allowlist) → `filterPayments` → `sortPayments` → `paginate` (`PAGE_SIZE` 20). `queryPayments` runs all four.
+
+- `GET /api/payments` uses `queryPayments` and returns a page of JSON.
+- `GET /api/payments/export` uses filter + sort with no `paginate`, so it exports every matching row, then calls `toCsv` / `exportFilename` in `src/lib/csv.ts`.
+- Pages are async server components that call `src/data/` directly. They don't fetch from the API routes.
 
 ## Where the rest of the context lives
 
@@ -53,7 +66,7 @@ These four explain most of the code, and breaking them is how bugs get in here.
 | --- | --- |
 | `src/app/` | Console routes: overview, payments, disputes, payouts. Cards is NWP-201 and does not exist yet |
 | `src/app/api/` | Route handlers |
-| `src/data/` | Seed JSON, the in-memory store, and types |
+| `src/data/` | Seed generator, the in-memory store, the query builder, and types |
 | `src/components/` | Tremor-based primitives and the console's own components |
 | `src/lib/` | Money, date, and CSV helpers, each with a `.test.ts` beside it. Read these before touching an amount |
 
