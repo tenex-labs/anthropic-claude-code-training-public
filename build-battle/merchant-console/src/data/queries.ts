@@ -11,24 +11,74 @@ const STATUSES: readonly (PaymentStatus | "all")[] = [
   "disputed",
 ]
 
+export const MAX_SEARCH_LENGTH = 200
+
+/** `YYYY-MM-DD`, or a full timestamp that ends in `Z`. Nothing local. */
+const UTC_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z)?$/
+
+/** A UTC date as a normalized ISO timestamp, or null if it is not one. */
+function parseUtcDate(raw: string): string | null {
+  if (!UTC_DATE.test(raw)) return null
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return null
+  // Reject dates that roll over rather than exist, like 2026-02-31.
+  if (date.toISOString().slice(0, 10) !== raw.slice(0, 10)) return null
+  return date.toISOString()
+}
+
+/**
+ * The filter params with no fixed fallback: an unknown merchant or a bad date
+ * cannot be quietly dropped, because dropping it widens the result. Route
+ * handlers call this before `parseFilters` and return 400 with the message.
+ */
+export function validateFilterParams(params: URLSearchParams): string | null {
+  const merchantId = params.get("merchantId")
+  if (merchantId && !merchantById(merchantId)) return "Unknown merchant."
+
+  const search = params.get("search")
+  if (search && search.length > MAX_SEARCH_LENGTH) {
+    return `Search must be ${MAX_SEARCH_LENGTH} characters or fewer.`
+  }
+
+  const from = params.get("from")
+  const to = params.get("to")
+  for (const [name, value] of [
+    ["from", from],
+    ["to", to],
+  ] as const) {
+    if (value && !parseUtcDate(value)) {
+      return `"${name}" must be a UTC date (YYYY-MM-DD) or a timestamp ending in Z.`
+    }
+  }
+  if (from && to && parseUtcDate(from)! > parseUtcDate(to)!) {
+    return '"from" must be on or before "to".'
+  }
+
+  return null
+}
+
 /**
  * Anything from the client is checked against an allowlist before it reaches
- * a query. Route handlers call this rather than reading params themselves.
+ * a query. Route handlers call `validateFilterParams` first, then this, rather
+ * than reading params themselves.
  */
 export function parseFilters(params: URLSearchParams): PaymentFilters {
   const status = params.get("status")
   const sort = params.get("sort")
   const direction = params.get("direction")
   const page = Number(params.get("page") ?? "1")
+  const merchantId = params.get("merchantId")
+  const from = params.get("from")
+  const to = params.get("to")
 
   return {
     status: STATUSES.includes(status as PaymentStatus)
       ? (status as PaymentStatus)
       : "all",
-    merchantId: params.get("merchantId") ?? undefined,
+    merchantId: merchantId && merchantById(merchantId) ? merchantId : undefined,
     search: params.get("search") ?? undefined,
-    from: params.get("from") ?? undefined,
-    to: params.get("to") ?? undefined,
+    from: (from && parseUtcDate(from)) || undefined,
+    to: (to && parseUtcDate(to)) || undefined,
     page: Number.isFinite(page) && page > 0 ? page : 1,
     sort: sort === "amount" ? "amount" : "createdAt",
     direction: direction === "asc" ? "asc" : "desc",

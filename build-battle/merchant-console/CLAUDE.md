@@ -32,7 +32,7 @@ Seed data is JSON, loaded into a store module at boot. Route handlers read and w
 
 Pages and route handlers are both thin. Server-component pages (`src/app/*/page.tsx`) and `src/app/api/**` handlers call straight into `src/data/` against the in-memory store. There is no HTTP hop between a page and its data.
 
-Payments are the one shared path. `parseFilters` (allowlists the URL params) → `filterPayments` → `sortPayments` → `paginate` in `src/data/queries.ts`; `queryPayments` composes all four. `GET /api/payments` and `GET /api/payments/export` both go through it, and `/payments` calls `queryPayments`. `filterPayments` does not paginate, so a server-side export covers every matching row. Serialization is `toCsv` in `src/lib/csv.ts`, which formats amounts through `formatMoney` in `src/lib/money.ts`.
+Payments are the one shared path. Routes call `validateFilterParams` first (400 on an unknown merchant, a non-UTC date or an over-long search, since dropping those would widen the result), then `parseFilters` (allowlists the URL params) → `filterPayments` → `sortPayments` → `paginate` in `src/data/queries.ts`; `queryPayments` composes all four. `GET /api/payments` and `GET /api/payments/export` both go through it, and `/payments` calls `queryPayments`. `filterPayments` does not paginate, so a server-side export covers every matching row. Serialization is `toCsv` in `src/lib/csv.ts`, which formats amounts through `formatMoney` in `src/lib/money.ts`.
 
 Known rough edges, worth knowing before you trust them:
 

@@ -1,4 +1,9 @@
-import { filterPayments, parseFilters, sortPayments } from "@/data/queries"
+import {
+  filterPayments,
+  parseFilters,
+  sortPayments,
+  validateFilterParams,
+} from "@/data/queries"
 import {
   exportFilename,
   exportScopeLabel,
@@ -27,6 +32,9 @@ export function GET(request: NextRequest) {
 
   const scope = parseExportScope(params.get("scope"))
   if (!scope) return badRequest('Scope must be "filter" or "all".')
+
+  const invalidFilter = validateFilterParams(params)
+  if (invalidFilter) return badRequest(invalidFilter)
 
   const current = parseFilters(params)
   // "All payments" still goes through the builder, just with no filters.
