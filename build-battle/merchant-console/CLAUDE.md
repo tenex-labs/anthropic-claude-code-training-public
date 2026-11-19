@@ -4,14 +4,21 @@ The internal tool support and ops staff use to look up a payment, refund it, wor
 
 Northwind Payments is fictional. Every merchant, cardholder, amount, and card in this app is generated.
 
-## Run it
+## Commands
 
 ```bash
 npm install
-npm run dev
+npm run dev                              # http://localhost:3000 (/ redirects to /overview)
+npm test                                 # vitest run, node environment, under a second
+npx vitest run src/lib/csv.test.ts       # one file
+npx vitest run -t "quotes cells"         # one test, by name
+npm run lint                             # eslint src (Next 16 removed `next lint`)
+npm run build                            # also type-checks
 ```
 
-No database, no seed step, no Docker.
+No database, no seed step, no Docker. Tests are plain Node with no DOM, and only `src/**/*.test.ts` is collected, so component tests are not set up.
+
+`next dev` writes an untracked `AGENTS.md` here on startup. Do not commit it; `agentRules: false` in `next.config.ts` turns it off.
 
 ## Data lives in memory
 
@@ -20,6 +27,18 @@ Seed data is JSON, loaded into a store module at boot. Route handlers read and w
 - Writes last for the life of the dev server and vanish on restart. That is expected.
 - Persistence is tracked separately as NWP-203. **Do not add a database, an ORM, or migrations.**
 - If you need more seed data, add it to the JSON. Never edit seed data to make a failing case disappear.
+
+## How the pieces fit
+
+Pages and route handlers are both thin. Server-component pages (`src/app/*/page.tsx`) and `src/app/api/**` handlers call straight into `src/data/` against the in-memory store. There is no HTTP hop between a page and its data.
+
+Payments are the one shared path. `parseFilters` (allowlists the URL params) → `filterPayments` → `sortPayments` → `paginate` in `src/data/queries.ts`; `queryPayments` composes all four. `GET /api/payments` and `GET /api/payments/export` both go through it, and `/payments` calls `queryPayments`. `filterPayments` does not paginate, so a server-side export covers every matching row. Serialization is `toCsv` in `src/lib/csv.ts`, which formats amounts through `formatMoney` in `src/lib/money.ts`.
+
+Known rough edges, worth knowing before you trust them:
+
+- `payments/page.tsx` keeps its own status allowlist and builds its filters by hand instead of calling `parseFilters`.
+- `sortPayments` sorts `amount` with a string compare, so the order is lexicographic. The UI never sets `sort`, so nothing hits it today.
+- The `/payments` Export button opens `export-dialog.tsx`, which only builds a URL for `GET /api/payments/export` (validated `columns` and `scope`). The file is always made on the server. Never build it from table rows, which are one page.
 
 ## Where the rest of the context lives
 
