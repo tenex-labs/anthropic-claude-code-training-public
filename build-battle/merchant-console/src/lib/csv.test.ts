@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { Payment } from "@/data/types"
-import { EXPORT_COLUMNS, exportFilename, toCsv } from "./csv"
+import {
+  DEFAULT_EXPORT_COLUMNS,
+  EXPORT_COLUMNS,
+  exportFilename,
+  parseExportColumns,
+  toCsv,
+} from "./csv"
 
 /**
  * The export is the file ops hands to a merchant, so a broken cell is a
@@ -73,6 +79,41 @@ describe("toCsv", () => {
 
   it("emits a header even with no rows", () => {
     expect(toCsv([], ["id"])).toBe("id")
+  })
+})
+
+describe("column selection (NWP-101)", () => {
+  it("writes a subset of columns in the order requested", () => {
+    const parsed = parseExportColumns("amount,status,id")
+    expect(parsed).toEqual({ ok: true, columns: ["amount", "status", "id"] })
+    if (!parsed.ok) return
+    expect(toCsv([payment], parsed.columns)).toBe(
+      ["amount,status,id", "$250.00,captured,pay_0001"].join("\n"),
+    )
+  })
+
+  it("leaves card last four out by default", () => {
+    const parsed = parseExportColumns(null)
+    expect(parsed).toEqual({ ok: true, columns: [...DEFAULT_EXPORT_COLUMNS] })
+    expect(DEFAULT_EXPORT_COLUMNS).not.toContain("last4")
+    if (!parsed.ok) return
+    const csv = toCsv([payment], parsed.columns)
+    expect(csv.split("\n")[0]).not.toContain("last4")
+    expect(csv).not.toContain("4242")
+  })
+
+  it("rejects an empty selection rather than writing an empty file", () => {
+    for (const raw of ["", " ", ",,"]) {
+      expect(parseExportColumns(raw)).toEqual({
+        ok: false,
+        message: "Choose at least one column to export.",
+      })
+    }
+  })
+
+  it("rejects a column name outside the allowlist", () => {
+    const parsed = parseExportColumns("id,cardholder_pan")
+    expect(parsed.ok).toBe(false)
   })
 })
 

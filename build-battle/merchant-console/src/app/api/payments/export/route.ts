@@ -1,25 +1,55 @@
 import { filterPayments, parseFilters, sortPayments } from "@/data/queries"
-import { exportFilename, toCsv } from "@/lib/csv"
-import { NextRequest } from "next/server"
+import {
+  exportFilename,
+  exportScopeLabel,
+  parseExportColumns,
+  parseExportScope,
+  toCsv,
+} from "@/lib/csv"
+import { NextRequest, NextResponse } from "next/server"
+
+function badRequest(message: string) {
+  return NextResponse.json({ message }, { status: 400 })
+}
 
 /**
- * Exports the payments table as CSV.
+ * Exports payments as CSV (NWP-101).
  *
- * Honors the active filters and reuses the query builder, but the column set
- * and the scope are fixed. Giving ops control over both is NWP-101.
+ * Runs on the server through the same query builder as GET /api/payments,
+ * without pagination, so the file holds every matching row rather than the
+ * page on screen. Columns and scope are validated before any data is read.
  */
 export function GET(request: NextRequest) {
-  const filters = parseFilters(request.nextUrl.searchParams)
+  const params = request.nextUrl.searchParams
+
+  const columns = parseExportColumns(params.get("columns"))
+  if (!columns.ok) return badRequest(columns.message)
+
+  const scope = parseExportScope(params.get("scope"))
+  if (!scope) return badRequest('Scope must be "filter" or "all".')
+
+  const current = parseFilters(params)
+  // "All payments" still goes through the builder, just with no filters.
+  const filters =
+    scope === "all"
+      ? {
+          ...parseFilters(new URLSearchParams()),
+          sort: current.sort,
+          direction: current.direction,
+        }
+      : current
+
   const rows = sortPayments(
     filterPayments(filters),
     filters.sort,
     filters.direction,
   )
+  const filename = exportFilename(new Date(), exportScopeLabel(scope, current))
 
-  return new Response(toCsv(rows), {
+  return new Response(toCsv(rows, columns.columns), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${exportFilename()}"`,
+      "content-disposition": `attachment; filename="${filename}"`,
     },
   })
 }
