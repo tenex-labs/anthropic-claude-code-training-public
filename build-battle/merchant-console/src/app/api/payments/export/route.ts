@@ -1,25 +1,49 @@
 import { filterPayments, parseFilters, sortPayments } from "@/data/queries"
-import { exportFilename, toCsv } from "@/lib/csv"
-import { NextRequest } from "next/server"
+import {
+  exportFilename,
+  exportLabel,
+  parseExportColumns,
+  parseExportScope,
+  toCsv,
+} from "@/lib/csv"
+import { NextRequest, NextResponse } from "next/server"
 
 /**
- * Exports the payments table as CSV.
+ * Exports payments as CSV, built here rather than in the browser so the file
+ * covers every matching row, not the page on screen.
  *
- * Honors the active filters and reuses the query builder, but the column set
- * and the scope are fixed. Giving ops control over both is NWP-101.
+ * - `columns`: comma-separated, checked against the allowlist in csv.ts.
+ *   Missing means the defaults, which leave out card last four.
+ * - `scope`: `current` (default) honors the filters; `all` ignores them.
+ *
+ * Filtering goes through the one query builder. There is no `paginate` here.
  */
 export function GET(request: NextRequest) {
-  const filters = parseFilters(request.nextUrl.searchParams)
-  const rows = sortPayments(
-    filterPayments(filters),
-    filters.sort,
-    filters.direction,
-  )
+  const params = request.nextUrl.searchParams
 
-  return new Response(toCsv(rows), {
+  const columns = parseExportColumns(params.get("columns"))
+  if (!columns.ok) {
+    return NextResponse.json({ error: columns.error }, { status: 400 })
+  }
+
+  const scope = parseExportScope(params.get("scope"))
+  if (!scope.ok) {
+    return NextResponse.json({ error: scope.error }, { status: 400 })
+  }
+
+  const parsed = parseFilters(params)
+  const filters =
+    scope.value === "all"
+      ? { status: "all" as const, sort: parsed.sort, direction: parsed.direction }
+      : parsed
+
+  const rows = sortPayments(filterPayments(filters), filters.sort, filters.direction)
+  const filename = exportFilename(new Date(), exportLabel(scope.value, filters))
+
+  return new Response(toCsv(rows, columns.value), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${exportFilename()}"`,
+      "content-disposition": `attachment; filename="${filename}"`,
     },
   })
 }
